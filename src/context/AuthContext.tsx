@@ -1,65 +1,69 @@
-// src/context/AuthContext.tsx
+import React, { createContext, useState, useEffect, ReactNode } from "react";
+import apiClient from "../api/client";
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { login as apiLogin, register as apiRegister, logout as apiLogout } from '@/api/auth';
-import apiClient from '@/api/client';
-console.log("AuthContext loaded")
 interface User {
-  id: string;
   email: string;
-  name: string;
+  role: string;
+  created_at: string;
 }
 
 interface AuthContextType {
   user: User | null;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => void;
   loading: boolean;
-  login: (email: string, password: string, rememberMe: boolean) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType>({} as AuthContextType);
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<React.PropsWithChildren<{}>> = ({ children }) => {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // On mount, check if user is already authenticated
-  useEffect(() => {
-    apiClient
-      .get('/api/me')
-      .then(res => setUser(res.data))
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
-  }, []);
-
-    const login = async (email: string, password: string, rememberMe: boolean) => {
-      const response = await apiLogin({ email, password, rememberMe });
-      // Assuming the response contains a token
-      localStorage.setItem('auth_token', response.data.token);
-      const res = await apiClient.get('/api/me');
-      setUser(res.data);
-    };
-
-
-  const register = async (name: string, email: string, password: string) => {
-    await apiRegister({ name, email, password });
-    const res = await apiClient.get('/api/me');
-    setUser(res.data);
+  // Fetch current user info
+  const fetchUser = async () => {
+    try {
+      const response = await apiClient.get("/auth/me"); // must include /auth prefix
+      setUser(response.data);
+    } catch (error) {
+      setUser(null);
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+    } finally {
+      setLoading(false);
+    }
   };
 
-    const logout = async () => {
-      await apiLogout();
-      localStorage.removeItem('auth_token');
-      setUser(null);
-    };
+  useEffect(() => {
+    fetchUser();
+  }, []);
 
+  const login = async (email: string, password: string) => {
+    setLoading(true);
+    try {
+      const response = await apiClient.post("/auth/login", new URLSearchParams({
+        username: email,
+        password: password
+      }));
+      localStorage.setItem("access_token", response.data.access_token);
+      localStorage.setItem("refresh_token", response.data.refresh_token);
+      await fetchUser();
+    } catch (error) {
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    setUser(null);
+  };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );
 };
-
-export const useAuth = () => useContext(AuthContext);
