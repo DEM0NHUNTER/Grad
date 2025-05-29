@@ -1,4 +1,4 @@
-// src/components/PrivateRoute.tsx
+// front_end/src/components/PrivateRoute.tsx
 
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
